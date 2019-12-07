@@ -3,6 +3,7 @@ import os
 from flask import Flask, flash, redirect, request, session, url_for, jsonify
 from flask_session import Session
 from flask_cors import CORS
+from flask import abort, make_response
 from werkzeug.utils import secure_filename
 from skelevision import TraceLog
 
@@ -96,50 +97,51 @@ def labels():
 def mine():
     relationship = dict()
     statistics = dict()
-    tl = session['dataset']
 
-    required_activities = request.json.get("required_activities")
-    print(required_activities)
+    if not session.get('dataset'):
+        abort(404)
+    else:
 
-    nt = tl.never_together()
-    never_together = []
-    for tup in nt:
-        never_together.append(tup)
+        tl = session['dataset']
 
-    relationship['neverTogether'] = never_together
+        nt = tl.never_together()
+        never_together = []
+        for tup in nt:
+            never_together.append(tup)
 
-    ab = tl.always_before()
-    always_before = []
-    for tup in ab:
-        always_before.append(tup)
+        relationship['neverTogether'] = never_together
 
-    relationship['alwaysBefore'] = always_before
+        ab = tl.always_before()
+        always_before = []
+        for tup in ab:
+            always_before.append(tup)
 
-    af = tl.always_after()
-    always_after = []
-    for tup in af:
-        always_after.append(tup)
+        relationship['alwaysBefore'] = always_before
 
-    relationship['alwaysAfter'] = always_after
+        af = tl.always_after()
+        always_after = []
+        for tup in af:
+            always_after.append(tup)
 
-    eq = tl.equivalence()
-    equivalence = []
-    for tup in eq:
-        equivalence.append(tup)
+        relationship['alwaysAfter'] = always_after
 
-    relationship['equivalence'] = equivalence
+        eq = tl.equivalence()
+        equivalence = []
+        for tup in eq:
+            equivalence.append(tup)
 
-    statistics['min'] = tl.min_counter()
-    statistics['max'] = tl.max_counter()
-    statistics['sum'] = tl.sum_counter()
+        relationship['equivalence'] = equivalence
+
+        statistics['min'] = tl.min_counter()
+        statistics['max'] = tl.max_counter()
+        statistics['sum'] = tl.sum_counter()
 
     return jsonify({'relationship': relationship, 'statistics': statistics})
 
 
-# @app.route('/eval', methods=['GET', 'POST'])
-# def eval():
-#     s_tracelog = [{"key": k, "value": v} for k, v in session['dataset'].items()]
-#     return jsonify(s_tracelog)
+@app.errorhandler(404)
+def not_found(error):
+    return make_response(jsonify({'error': 'Dataset not found. Please upload a dataset first'}), 404)
 
 
 if __name__ == '__main__':
