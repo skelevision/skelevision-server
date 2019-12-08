@@ -85,56 +85,71 @@ def upload_file():
 
 @app.route('/labels', methods=['GET', 'POST'])
 def labels():
-    tl = session['dataset']
+    if request.method == 'POST':
+        tl = session['dataset']
 
-    labels = tl.labels
-    labels = {label: 1 for label in labels}
+        labels = tl.labels
+        labels = {label: 1 for label in labels}
 
-    return jsonify(labels)
+        return jsonify(labels)
+
+    return ""
 
 
 @app.route('/mine', methods=['GET', 'POST'])
 def mine():
-    relationship = dict()
-    statistics = dict()
 
     if not session.get('dataset'):
         abort(404)
-    else:
 
-        tl = session['dataset']
+    tracelog = session['dataset']
+    relationship = dict()
+    statistics = dict()
 
-        nt = tl.never_together()
+    if request.method == 'GET':
+
+        tracelog = session['dataset']
+
+        nt = tracelog.never_together()
         never_together = []
         for tup in nt:
             never_together.append(tup)
 
         relationship['neverTogether'] = never_together
 
-        ab = tl.always_before()
+        ab = tracelog.always_before()
         always_before = []
         for tup in ab:
             always_before.append(tup)
 
         relationship['alwaysBefore'] = always_before
 
-        af = tl.always_after()
+        af = tracelog.always_after()
         always_after = []
         for tup in af:
             always_after.append(tup)
 
         relationship['alwaysAfter'] = always_after
 
-        eq = tl.equivalence()
+        eq = tracelog.equivalence()
         equivalence = []
         for tup in eq:
             equivalence.append(tup)
 
         relationship['equivalence'] = equivalence
 
-        statistics['min'] = tl.min_counter()
-        statistics['max'] = tl.max_counter()
-        statistics['sum'] = tl.sum_counter()
+        statistics['min'] = tracelog.min_counter()
+        statistics['max'] = tracelog.max_counter()
+        statistics['sum'] = tracelog.sum_counter()
+
+    if request.method == 'POST':
+
+        # dummy variable for required and forbidden activities
+        required_activities = []
+        forbidden_activities = []
+
+        for tl in tracelog:
+            print(tl)
 
     return jsonify({'relationship': relationship, 'statistics': statistics})
 
