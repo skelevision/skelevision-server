@@ -1,8 +1,8 @@
-static/
-flask_session/
-data/
-cache/
 .vscode/
+cache/
+data/
+flask_session/
+static/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
