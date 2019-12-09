@@ -58,6 +58,28 @@ def process(dataset):
     session["dataset"] = tl.augment()
 
 
+def valid(request):
+    data = request.get_json(force=True)
+
+    # Missing parameters
+    if "requiredActivities" not in data or "forbiddenActivities" not in data:
+        return False
+
+    reqA = set(data["requiredActivities"])
+    forbA = set(data["forbiddenActivities"])
+
+    # All filter activities are present in the original dataset
+    for a in reqA.union(forbA):
+        if a not in session["dataset"].labels:
+            return False
+
+    # The two filter set are disjoint
+    if len(reqA.intersection(forbA)) > 0:
+        return False
+
+    return True
+
+
 @app.route("/upload", methods=["POST"])
 def upload_file():
     if "file" not in request.files:
@@ -116,6 +138,10 @@ def mine():
     if not session.get("dataset"):
         abort(404)
 
+    if not valid(request):
+        content = {"Invalid request": "Please check your request and try again."}
+        return jsonify(content), status.HTTP_400_BAD_REQUEST
+
     tracelog = session["dataset"]
 
     required_activities = []
@@ -123,8 +149,6 @@ def mine():
 
     relationships = dict()
     statistics = dict()
-
-    tracelog = session["dataset"]
 
     nt = tracelog.never_together()
     never_together = []
