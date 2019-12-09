@@ -22,6 +22,8 @@ from werkzeug.utils import secure_filename
 UPLOAD_FOLDER = "./uploads"
 CACHE_FOLDER = "./cache"
 ALLOWED_EXTENSIONS = {"xes", "gz"}
+SESSION_FILE_DIR = CACHE_FOLDER
+SESSION_FILE_THRESHOLD = 3
 
 app = Flask(__name__)
 
@@ -29,9 +31,9 @@ app.config.from_object(__name__)
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_FILE_SIZE"] = 1024 ** 3
-SESSION_FILE_DIR = CACHE_FOLDER
-SESSION_FILE_THRESHOLD = 3
 
+app.config["SESSION_FILE_DIR"] = SESSION_FILE_DIR
+app.config["SESSION_FILE_THRESHOLD"] = SESSION_FILE_THRESHOLD
 app.config["SECRET_KEY"] = os.urandom(64)
 app.config["SESSION_TYPE"] = "filesystem"
 
@@ -132,7 +134,7 @@ def labels():
     return jsonify(labels), status.HTTP_200_OK
 
 
-@app.route("/mine", methods=["GET"])
+@app.route("/mine", methods=["POST"])
 def mine():
 
     if not session.get("dataset"):
