@@ -1,163 +1,172 @@
 import os
 
-from flask import Flask, flash, redirect, request, session, url_for, jsonify
-from flask_session import Session
+from flask import (
+    Flask,
+    abort,
+    flash,
+    jsonify,
+    make_response,
+    redirect,
+    request,
+    send_from_directory,
+    session,
+    url_for,
+)
+from flask_api import status
 from flask_cors import CORS
-from flask import abort, make_response
-from werkzeug.utils import secure_filename
+from flask_session import Session
+from pm4py.objects.log.importer.xes import factory as xes_importer
 from skelevision import TraceLog
+from werkzeug.utils import secure_filename
 
-from pm4py.objects.log.importer.xes import factory as xes_import_factory
-
-UPLOAD_FOLDER = './static'
-CACHE_FOLDER = './cache'
-ALLOWED_EXTENSIONS = {'xes', 'gz'}
+UPLOAD_FOLDER = "./uploads"
+CACHE_FOLDER = "./cache"
+ALLOWED_EXTENSIONS = {"xes", "gz"}
 
 app = Flask(__name__)
 
 app.config.from_object(__name__)
 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 1024 ** 3
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["MAX_FILE_SIZE"] = 1024 ** 3
 SESSION_FILE_DIR = CACHE_FOLDER
-SESSION_FILE_THRESHOLD = 10
+SESSION_FILE_THRESHOLD = 3
 
-app.config['SECRET_KEY'] = os.urandom(64)
-app.config['SESSION_TYPE'] = 'filesystem'
+app.config["SECRET_KEY"] = os.urandom(64)
+app.config["SESSION_TYPE"] = "filesystem"
 
 Session(app)
 
+app.config["CORS_HEADERS"] = "Content-Type"
+CORS(app, supports_credentials=True)
 
-@app.route('/')
-def index():
-    return "Hello, World!"
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 def process(dataset):
     tracelog = dict()
-    log = xes_import_factory.apply(dataset)
+    log = xes_importer.apply(dataset)
     for case in log:
         a = tuple([event["concept:name"] for event in case])
 
         if a not in tracelog:
             tracelog[a] = 0
         tracelog[a] += 1
-    session["dataset"] = TraceLog(tracelog)
+    tl = TraceLog(tracelog)
+    session["dataset"] = tl.augment()
 
 
-def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-@app.route('/upload', methods=['GET', 'POST'])
+@app.route("/upload", methods=["POST"])
 def upload_file():
-    if request.method == 'POST':
-        # check if the post request has the file part
-        if 'file' not in request.files:
-            flash('No file part')
-            return redirect(request.url)
+    if "file" not in request.files:
+        content = {"No file part": "Plase upload a new file."}
+        return jsonify(content), status.HTTP_400_BAD_REQUEST
 
-        file = request.files['file']
+    f = request.files["file"]
 
-        # if user does not select file, browser also
-        # submit an empty part without filename
-        if file.filename == '':
-            flash('No selected file')
-            return redirect(request.url)
-        if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            process(filepath)
-            s_tracelog = [{"key": k, "value": v} for k, v in session['dataset'].items()]
-            return jsonify(s_tracelog)
-    return '''
-    <!doctype html>
-    <title>Upload new File</title>
-    <h1>Upload new File</h1>
-    <form method=post enctype=multipart/form-data>
-      <input type=file name=file>
-      <input type=submit value=Upload>
-    </form>
-    '''
+    if f.filename == "":
+        content = {"No file selected for uploading": "Plase upload a new file."}
+        return jsonify(content), status.HTTP_400_BAD_REQUEST
+
+    if not allowed_file(f.filename):
+        content = {"Allowed file types are xes and gz": "Plase try again."}
+        return jsonify(content), status.HTTP_400_BAD_REQUEST
+
+    try:
+        filepath = os.path.join(
+            app.config["UPLOAD_FOLDER"], secure_filename(f.filename)
+        )
+        f.save(filepath)
+    except Exception as e:
+        content = {
+            "Unexpected exception occured: {}".format(e): "Please try again later."
+        }
+        return jsonify(content), status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    try:
+        process(filepath)
+    except Exception as e:
+        content = {
+            "Unexpected exception occured: {}".format(e): "Please try again later."
+        }
+        return jsonify(content), status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    content = {"Uploading the dataset was succesful.": "Succesful."}
+    return jsonify(content), status.HTTP_200_OK
 
 
-@app.route('/labels', methods=['GET', 'POST'])
+@app.route("/labels", methods=["GET"])
 def labels():
-    if request.method == 'POST':
-        tl = session['dataset']
-
-        labels = tl.labels
-        labels = {label: 1 for label in labels}
-
-        return jsonify(labels)
-
-    return ""
-
-
-@app.route('/mine', methods=['GET', 'POST'])
-def mine():
-
-    if not session.get('dataset'):
+    if not session.get("dataset"):
         abort(404)
 
-    tracelog = session['dataset']
-    relationship = dict()
+    tl = session["dataset"]
+
+    labels = list(tl.labels)
+    labels = {"labels": labels}
+
+    return jsonify(labels), status.HTTP_200_OK
+
+
+@app.route("/mine", methods=["GET"])
+def mine():
+
+    if not session.get("dataset"):
+        abort(404)
+
+    tracelog = session["dataset"]
+
+    required_activities = []
+    forbidden_activities = []
+
+    relationships = dict()
     statistics = dict()
 
-    if request.method == 'GET':
+    tracelog = session["dataset"]
 
-        tracelog = session['dataset']
+    nt = tracelog.never_together()
+    never_together = []
+    for tup in nt:
+        never_together.append(tup)
 
-        nt = tracelog.never_together()
-        never_together = []
-        for tup in nt:
-            never_together.append(tup)
+    relationships["neverTogether"] = never_together
 
-        relationship['neverTogether'] = never_together
+    ab = tracelog.always_before()
+    always_before = []
+    for tup in ab:
+        always_before.append(tup)
 
-        ab = tracelog.always_before()
-        always_before = []
-        for tup in ab:
-            always_before.append(tup)
+    relationships["alwaysBefore"] = always_before
 
-        relationship['alwaysBefore'] = always_before
+    af = tracelog.always_after()
+    always_after = []
+    for tup in af:
+        always_after.append(tup)
 
-        af = tracelog.always_after()
-        always_after = []
-        for tup in af:
-            always_after.append(tup)
+    relationships["alwaysAfter"] = always_after
 
-        relationship['alwaysAfter'] = always_after
+    eq = tracelog.equivalence()
+    equivalence = []
+    for tup in eq:
+        equivalence.append(tup)
 
-        eq = tracelog.equivalence()
-        equivalence = []
-        for tup in eq:
-            equivalence.append(tup)
+    relationships["equivalence"] = equivalence
 
-        relationship['equivalence'] = equivalence
+    statistics["min"] = tracelog.min_counter()
+    statistics["max"] = tracelog.max_counter()
+    statistics["sum"] = tracelog.sum_counter()
 
-        statistics['min'] = tracelog.min_counter()
-        statistics['max'] = tracelog.max_counter()
-        statistics['sum'] = tracelog.sum_counter()
-
-    if request.method == 'POST':
-
-        # dummy variable for required and forbidden activities
-        required_activities = []
-        forbidden_activities = []
-
-        for tl in tracelog:
-            print(tl)
-
-    return jsonify({'relationship': relationship, 'statistics': statistics})
+    return jsonify({"relationships": relationships, "statistics": statistics})
 
 
 @app.errorhandler(404)
 def not_found(error):
-    return make_response(jsonify({'error': 'Dataset not found. Please upload a dataset first'}), 404)
+    return make_response(
+        jsonify({"error": "Dataset not found. Please upload a dataset first"}), 404
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
