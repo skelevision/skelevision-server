@@ -7,21 +7,27 @@ from flask_cors import CORS
 from flask_api import status
 from skelevision import TraceLog
 
-UPLOAD_FOLDER = 'uploads'
-CACHE_FOLDER = 'cache'
+UPLOAD_FOLDER = './uploads'
+CACHE_FOLDER = './cache'
 ALLOWED_EXTENSIONS = {'xes','jpg'}
+
 app = Flask(__name__)
+
 app.config.from_object(__name__)
+
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_FILE_SIZE'] = 1024 ** 3
+SESSION_FILE_DIR = CACHE_FOLDER
+SESSION_FILE_THRESHOLD = 3
+
 app.config['SECRET_KEY'] = os.urandom(64)
 app.config['SESSION_TYPE'] = 'filesystem'
-SESSION_FILE_DIR = CACHE_FOLDER
-SESSION_FILE_THRESHOLD = 10
+
+Session(app)
+
 app.config['CORS_HEADERS'] = 'Content-Type'
 CORS(app, supports_credentials=True)
 
-Session(app)
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -38,35 +44,38 @@ def process(dataset):
         tracelog[a] += 1
     session["dataset"] = TraceLog(tracelog)
 
-@app.route('/uploads/<filename>')
-def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'],
-                               filename)
-
-@app.route('/upload', methods = ['GET','POST'])
+@app.route('/upload', methods = ['POST'])
 def upload_file():
-    if request.method == 'POST':
-        if 'file' not in request.files:
-            content = {'No file part': 'Plase upload a new file.'}
-            return jsonify(content), status.HTTP_400_BAD_REQUEST
-        f = request.files['file']
-        if f.filename == "":
-            content = {'No file selected for uploading': 'Plase upload a new file.'}
-            return jsonify(content), status.HTTP_400_BAD_REQUEST
+    if 'file' not in request.files:
+        content = {'No file part': 'Plase upload a new file.'}
+        return jsonify(content), status.HTTP_400_BAD_REQUEST
 
-        if f and allowed_file(f.filename):
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(f.filename))
-            f.save(filepath)
-            process(filepath)
-            s_tracelog = [{"key": k, "value": v} for k, v in session['dataset'].items()]
-            return jsonify(s_tracelog), status.HTTP_200_OK
+    f = request.files['file']
 
-        else:
-            content = {'Allowed file types are txt, pdf, png, jpg, jpeg, gif': 'Plase try again.'}
-            return jsonify(content), status.HTTP_404_NOT_FOUND
-    
-    return render_template('upload.html')
-   
-        
+    if f.filename == "":
+        content = {'No file selected for uploading': 'Plase upload a new file.'}
+        return jsonify(content), status.HTTP_400_BAD_REQUEST
+
+    if not allowed_file(f.filename):
+        content = {'Allowed file types are xes and gz': 'Plase try again.'}
+        return jsonify(content), status.HTTP_404_NOT_FOUND
+
+    try:
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(f.filename))
+        f.save(filepath)
+    except Exception as e:
+        content = {'Unexpected exception occured: {}'.format(e): 'Please try again later.'}
+        return jsonify(content), status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    try:
+        process(filepath)
+    except Exception as e:
+        content = {'Unexpected exception occured: {}'.format(e): 'Please try again later.'}
+        return jsonify(content), status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    content = {'Uploading the dataset was succesful.'}
+    return jsonify(content), status.HTTP_200_OK
+
 if __name__ == '__main__':
+    app.debug = True
     app.run()
