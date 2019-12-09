@@ -3,6 +3,7 @@ cache/
 data/
 flask_session/
 static/
+uploads/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
