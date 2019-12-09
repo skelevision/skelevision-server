@@ -9,7 +9,7 @@ from skelevision import TraceLog
 
 UPLOAD_FOLDER = './uploads'
 CACHE_FOLDER = './cache'
-ALLOWED_EXTENSIONS = {'xes','jpg'}
+ALLOWED_EXTENSIONS = {'xes','gz'}
 
 app = Flask(__name__)
 
@@ -73,7 +73,7 @@ def upload_file():
         content = {'Unexpected exception occured: {}'.format(e): 'Please try again later.'}
         return jsonify(content), status.HTTP_500_INTERNAL_SERVER_ERROR
 
-    content = {'Uploading the dataset was succesful.'}
+    content = {'Uploading the dataset was succesful.': 'Succesful.'}
     return jsonify(content), status.HTTP_200_OK
 
 if __name__ == '__main__':
