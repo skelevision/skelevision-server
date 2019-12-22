@@ -16,7 +16,7 @@ from flask_api import status
 from flask_cors import CORS
 from flask_session import Session
 from pm4py.objects.log.importer.xes import factory as xes_importer
-from skelevision import TraceLog
+from skelevision import TraceLog, LogSkeleton
 from werkzeug.utils import secure_filename
 
 UPLOAD_FOLDER = "./uploads"
@@ -146,45 +146,26 @@ def mine():
 
     tracelog = session["dataset"]
 
-    required_activities = []
-    forbidden_activities = []
+    data = request.get_json(force=True)
 
-    relationships = dict()
-    statistics = dict()
+    reqA = set(data["requiredActivities"])
+    forbA = set(data["forbiddenActivities"])
 
-    nt = tracelog.never_together()
-    never_together = []
-    for tup in nt:
-        never_together.append(tup)
+    results = LogSkeleton.mine(tracelog, reqA, forbA)
 
-    relationships["neverTogether"] = never_together
+    response = {
+        "relationships": dict(),
+        "statistics": {
+            "min": results["statistics"]["min"],
+            "sum": results["statistics"]["sum"],
+            "max": results["statistics"]["max"],
+        },
+    }
 
-    ab = tracelog.always_before()
-    always_before = []
-    for tup in ab:
-        always_before.append(tup)
+    for k, v in results["relationships"].items():
+        response["relationships"][k] = [list(pair) for pair in v]
 
-    relationships["alwaysBefore"] = always_before
-
-    af = tracelog.always_after()
-    always_after = []
-    for tup in af:
-        always_after.append(tup)
-
-    relationships["alwaysAfter"] = always_after
-
-    eq = tracelog.equivalence()
-    equivalence = []
-    for tup in eq:
-        equivalence.append(tup)
-
-    relationships["equivalence"] = equivalence
-
-    statistics["min"] = tracelog.min_counter()
-    statistics["max"] = tracelog.max_counter()
-    statistics["sum"] = tracelog.sum_counter()
-
-    return jsonify({"relationships": relationships, "statistics": statistics})
+    return jsonify(response)
 
 
 @app.errorhandler(404)
