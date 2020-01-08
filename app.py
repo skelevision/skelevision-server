@@ -48,16 +48,9 @@ def allowed_file(filename):
 
 
 def process(dataset):
-    tracelog = dict()
-    log = xes_importer.apply(dataset)
-    for case in log:
-        a = tuple([event["concept:name"] for event in case])
-
-        if a not in tracelog:
-            tracelog[a] = 0
-        tracelog[a] += 1
-    tl = TraceLog(tracelog)
-    session["dataset"] = tl.augment()
+    tl = (TraceLog.from_xes(dataset))
+    tl_aug = tl.augment()
+    session["dataset"] = tl_aug
 
 
 def valid(request):
@@ -156,10 +149,8 @@ def mine():
     response = {
         "relationships": dict(),
         "statistics": {
-            "min": results["statistics"]["min"],
-            "sum": results["statistics"]["sum"],
-            "max": results["statistics"]["max"],
-        },
+            "node": results['statistics']['node'],
+        }
     }
 
     for k, v in results["relationships"].items():
