@@ -49,7 +49,8 @@ def allowed_file(filename):
 
 def process(dataset):
     tl = (TraceLog.from_xes(dataset))
-    session["dataset"] = tl
+    tl_aug = tl.augment()
+    session["dataset"] = tl_aug
 
 
 def valid(request):
